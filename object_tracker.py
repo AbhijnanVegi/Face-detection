@@ -1,4 +1,3 @@
-# from xmodels import *
 from xutils import utils, parse_config
 
 import os, sys, time, datetime, random, csv
@@ -24,7 +23,7 @@ model = torch.hub.load('yolov5', 'custom', path='adam/weights/best.pt',source="l
 model.conf = conf_thres
 model.nms = nms_thres
 # model.eval()
-classes = ["yes_mask","no_mask"]
+classes = ["no_mask","yes_mask"]
 Tensor = torch.cuda.FloatTensor
 
 def detect_image(img):
@@ -74,7 +73,8 @@ outvideo = cv2.VideoWriter(videopath.replace(".mp4", "-det.mp4"),fourcc,20.0,(vw
 frames = 0
 starttime = time.time()
 csv_out = open(videopath.replace(".mp4", ".csv"), 'w')
-writer = csv.DictWriter(csv_out, fieldnames=['frame', 'Total non masked faces', 'Total masked faces', 'Non masked ROIs', 'Masked ROIs']).writeheader()
+writer = csv.DictWriter(csv_out, fieldnames=['frame', 'Total non masked faces', 'Total masked faces', 'Non masked ROIs', 'Masked ROIs'])
+writer.writeheader()
 while(True):
     ret, frame = vid.read()
     if not ret:
@@ -90,6 +90,7 @@ while(True):
     pad_y = max(img.shape[1] - img.shape[0], 0) * (img_size / max(img.shape))
     unpad_h = img_size - pad_y
     unpad_w = img_size - pad_x
+    tracked_objects = None
     if detections is not None:
         tracked_objects = mot_tracker.update(detections.cpu())
 
@@ -105,14 +106,14 @@ while(True):
             cv2.rectangle(frame, (x1, y1), (x1+box_w, y1+box_h), color, 4)
             cv2.rectangle(frame, (x1, y1-35), (x1+len(cls)*19+80, y1), color, -1)
             cv2.putText(frame, cls + "-" + str(int(obj_id)), (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 3)
-
-    writer.writerow({
-        'frame': frames,
-        'Total non masked faces': len(tracked_objects), 
-        'Total masked faces': 0, 
-        'Non masked ROIs': 0, 
-        'Masked ROIs': 0
-    })
+    if (tracked_objects):
+        writer.writerow({
+            'frame': frames,
+            'Total non masked faces': len(x for x in tracked_objects if x[5] == 0), 
+            'Total masked faces': len(x for x in tracked_objects if x[5] == 1), 
+            'Non masked ROIs': " ".join(f"{x1},{y1},{x2},{y2}" for x1, y1, x2, y2, obj_id, cls_pred in tracked_objects if cls_pred == 0), 
+            'Masked ROIs': " ".join(f"{x1},{y1},{x2},{y2}" for x1, y1, x2, y2, obj_id, cls_pred in tracked_objects if cls_pred == 1)
+        })
     cv2.imshow('Stream', frame)
     outvideo.write(frame)
     ch = 0xFF & cv2.waitKey(1)
